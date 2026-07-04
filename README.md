@@ -7,7 +7,7 @@ SQL (DB Browser for SQLite)
 
 Dataset
 DOHMH New York City Restaurant Inspection Results
-Source: NYC Open Data (data.cityofnewyork.us)
+Source: NYC Open Data — [Download here](https://data.cityofnewyork.us/Health/DOHMH-New-York-City-Restaurant-Inspection-Results/43nn-pn8j)
 Records: 290,000+
 Coverage: All five NYC boroughs
 
