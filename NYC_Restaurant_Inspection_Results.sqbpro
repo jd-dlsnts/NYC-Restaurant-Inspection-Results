@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="nyc_restaurant.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure pragmas browser query" current="3"/></window><tab_structure><column_width id="0" width="474"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="3744"/><column_width id="4" width="0"/><expanded_item id="0" parent="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="DOHMH_New_York_City_Restaurant_Inspection_Results_20260630" custom_title="0" dock_id="1" table="4,58:mainDOHMH_New_York_City_Restaurant_Inspection_Results_20260630"/><dock_state state="000000ff00000000fd00000001000000020000083b000004f6fc0100000001fb000000160064006f0063006b00420072006f007700730065003101000000000000083b0000015d00ffffff0000083b0000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="DOHMH_New_York_City_Restaurant_Inspection_Results_20260630" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort><column index="14" mode="0"/></sort><column_widths><column index="1" value="70"/><column index="2" value="300"/><column index="3" value="109"/><column index="4" value="85"/><column index="5" value="257"/><column index="6" value="59"/><column index="7" value="101"/><column index="8" value="241"/><column index="9" value="112"/><column index="10" value="300"/><column index="11" value="107"/><column index="12" value="300"/><column index="13" value="117"/><column index="14" value="46"/><column index="15" value="47"/><column index="16" value="85"/><column index="17" value="88"/><column index="18" value="300"/><column index="19" value="117"/><column index="20" value="124"/><column index="21" value="108"/><column index="22" value="93"/><column index="23" value="79"/><column index="24" value="62"/><column index="25" value="85"/><column index="26" value="39"/><column index="27" value="300"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1*">--1. Graded Inspection Type
+SELECT 
+    &quot;INSPECTION TYPE&quot;,
+    COUNT(*) AS graded_count,
+    ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS pct_of_total
+FROM DOHMH_New_York_City_Restaurant_Inspection_Results_20260630
+WHERE GRADE IS NOT NULL
+GROUP BY &quot;INSPECTION TYPE&quot;
+ORDER BY graded_count DESC;
+
+--2. Percentage of Grade 
+SELECT 
+	GRADE,
+	COUNT(DBA) AS restaurant_count,
+	ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) AS pct_of_total
+FROM DOHMH_New_York_City_Restaurant_Inspection_Results_20260630
+WHERE GRADE IS NOT NULL
+GROUP BY GRADE
+ORDER BY 3 DESC;
+
+--3. B and C graded restaurants per CUISINE DESCRIPTION
+WITH total_inspections AS (
+	SELECT
+		&quot;CUISINE DESCRIPTION&quot;,
+		COUNT(*) as total_count
+	FROM DOHMH_New_York_City_Restaurant_Inspection_Results_20260630
+	WHERE GRADE IS NOT NULL
+	GROUP BY &quot;CUISINE DESCRIPTION&quot;
+	),
+	
+	bc_inspections AS (
+	SELECT 
+		&quot;CUISINE DESCRIPTION&quot;,
+		COUNT(*) AS bc_count
+	FROM DOHMH_New_York_City_Restaurant_Inspection_Results_20260630
+	WHERE GRADE IN ('B','C')
+	GROUP BY &quot;CUISINE DESCRIPTION&quot;
+	)
+
+SELECT 
+    t.&quot;CUISINE DESCRIPTION&quot;,
+    t.total_count,
+    b.bc_count,
+    ROUND(100.0 * b.bc_count / t.total_count, 2) AS bc_failure_rate
+FROM total_inspections t
+JOIN bc_inspections b ON t.&quot;CUISINE DESCRIPTION&quot; = b.&quot;CUISINE DESCRIPTION&quot;
+ORDER BY bc_failure_rate DESC
+LIMIT 15;
+
+--4. B and C graded restaurants per BORO
+    SELECT 
+        BORO,
+        COUNT(*) AS total_count
+    FROM DOHMH_New_York_City_Restaurant_Inspection_Results_20260630
+    WHERE GRADE IS NOT NULL
+    AND BORO != '0'
+    GROUP BY BORO
+),
+bc_inspections AS (
+    SELECT 
+        BORO,
+        COUNT(*) AS bc_count
+    FROM DOHMH_New_York_City_Restaurant_Inspection_Results_20260630
+    WHERE GRADE IN ('B', 'C')
+    AND BORO != '0'
+    GROUP BY BORO
+)
+SELECT 
+    t.BORO,
+    t.total_count,
+    b.bc_count,
+    ROUND(100.0 * b.bc_count / t.total_count, 2) AS bc_failure_rate
+FROM total_inspections t
+JOIN bc_inspections b ON t.BORO = b.BORO
+ORDER BY bc_failure_rate DESC;
+
+--5. B and C grade per borough
+WITH top_violation AS (
+	SELECT
+		&quot;VIOLATION DESCRIPTION&quot;,
+		COUNT(*) AS total_violations
+	FROM DOHMH_New_York_City_Restaurant_Inspection_Results_20260630
+	WHERE &quot;VIOLATION DESCRIPTION&quot; IS NOT NULL
+	GROUP BY &quot;VIOLATION DESCRIPTION&quot;
+	ORDER BY total_violations DESC
+	LIMIT 3 -- This strictly forces the CTE to only hold the #1 top violation
+)
+SELECT
+	a.BORO,
+	b.&quot;VIOLATION DESCRIPTION&quot;,
+	b.total_violations AS citywide_total,
+	COUNT(*) AS boro_count -- Counts how many times this specific violation hit this boro
+FROM DOHMH_New_York_City_Restaurant_Inspection_Results_20260630 a
+JOIN top_violation b ON a.&quot;VIOLATION DESCRIPTION&quot; = b.&quot;VIOLATION DESCRIPTION&quot;
+WHERE a.BORO != '0'
+GROUP BY a.BORO, b.&quot;VIOLATION DESCRIPTION&quot;, b.total_violations
+ORDER BY BORO,boro_count DESC;
+
+--6. Most common violation city wide
+WITH total_vc AS (
+    SELECT 
+        &quot;VIOLATION DESCRIPTION&quot;,
+        COUNT(*) AS violation_count
+    FROM DOHMH_New_York_City_Restaurant_Inspection_Results_20260630
+	WHERE BORO != '0'
+    GROUP BY &quot;VIOLATION DESCRIPTION&quot;
+	
+)
+SELECT 
+    &quot;VIOLATION DESCRIPTION&quot;,
+    violation_count,
+    ROUND(100.0 * violation_count / SUM(violation_count) OVER (), 2) AS pct_of_total
+FROM total_vc
+WHERE &quot;VIOLATION DESCRIPTION&quot; != ''
+ORDER BY violation_count DESC
+LIMIT 10;
+
+--7. Highest Rodent and Pest-Related Violation per Boro
+WITH total_inspections AS (
+    SELECT 
+        BORO,
+        COUNT(*) AS total_count
+    FROM DOHMH_New_York_City_Restaurant_Inspection_Results_20260630
+    WHERE BORO != '0'
+    AND &quot;VIOLATION DESCRIPTION&quot; != ''
+    GROUP BY BORO
+),
+pest_violations AS (
+    SELECT 
+        BORO,
+        COUNT(*) AS pest_count
+    FROM DOHMH_New_York_City_Restaurant_Inspection_Results_20260630
+    WHERE BORO != '0'
+    AND &quot;VIOLATION DESCRIPTION&quot; LIKE '%harborage%'
+    GROUP BY BORO
+)
+SELECT 
+    a.BORO,
+    a.total_count,
+    b.pest_count,
+    ROUND(100.0 * b.pest_count / a.total_count, 2) AS pest_rate
+FROM total_inspections a
+JOIN pest_violations b ON a.BORO = b.BORO
+ORDER BY pest_rate DESC;
+
+--
+SELECT 
+	COUNT(*)
+	FROM DOHMH_New_York_City_Restaurant_Inspection_Results_20260630</sql><current_tab id="0"/></tab_sql></sqlb_project>
